@@ -3,6 +3,9 @@
 One task per (scan, module). The orchestrator enqueues a group of these plus a
 finalize callback; each task updates its ModuleRun row and persists findings
 as the module emits them. The finalize task flips the Scan row to `done`.
+
+Every state change also publishes an event on the scan's Redis pub/sub channel
+so the SSE endpoint can forward it to connected browsers in real time.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from app.models.module_run import ModuleRun, ModuleStatus
 from app.models.scan import Scan, ScanStatus
 from app.recon.base import Context, FindingDraft
 from app.recon.registry import MODULES, get_module
+from app.services.events import publish_event
 from app.workers.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -27,6 +31,29 @@ log = logging.getLogger(__name__)
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _module_run_payload(run: ModuleRun) -> dict:
+    return {
+        "id": str(run.id),
+        "module": run.module,
+        "status": run.status.value,
+        "error": run.error,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+    }
+
+
+def _finding_payload(f: Finding) -> dict:
+    return {
+        "id": str(f.id),
+        "scan_id": str(f.scan_id),
+        "module": f.module,
+        "severity": f.severity.value,
+        "title": f.title,
+        "data": f.data,
+        "created_at": f.created_at.isoformat() if f.created_at else None,
+    }
 
 
 @celery_app.task(name="recon.run_module")
@@ -43,12 +70,20 @@ def run_module(scan_id: str, module_name: str) -> dict:
 
         # Also flip the parent scan to running on the first module start.
         scan = session.get(Scan, scan_uuid)
+        scan_flipped = False
         if scan and scan.status == ScanStatus.pending:
             scan.status = ScanStatus.running
+            scan_flipped = True
 
         run.status = ModuleStatus.running
         run.started_at = _now()
         session.commit()
+        session.refresh(run)
+        run_payload = _module_run_payload(run)
+
+    publish_event(scan_uuid, "module_run", run_payload)
+    if scan_flipped:
+        publish_event(scan_uuid, "scan", {"status": ScanStatus.running.value})
 
     try:
         module = get_module(module_name)
@@ -63,6 +98,8 @@ def run_module(scan_id: str, module_name: str) -> dict:
             run.error = str(e)
             run.finished_at = _now()
             session.commit()
+            session.refresh(run)
+            publish_event(scan_uuid, "module_run", _module_run_payload(run))
         return {"module": module_name, "status": "failed", "error": str(e)}
 
     # Need the domain — re-read from the scan row.
@@ -84,6 +121,8 @@ def run_module(scan_id: str, module_name: str) -> dict:
             )
             session.add(finding)
             session.commit()
+            session.refresh(finding)
+            publish_event(scan_uuid, "finding", _finding_payload(finding))
 
     ctx = Context(domain=domain, scan_id=scan_uuid, emit=emit)
 
@@ -106,6 +145,8 @@ def run_module(scan_id: str, module_name: str) -> dict:
         run.error = error
         run.finished_at = _now()
         session.commit()
+        session.refresh(run)
+        publish_event(scan_uuid, "module_run", _module_run_payload(run))
 
     return {"module": module_name, "status": status.value}
 
@@ -124,8 +165,18 @@ def finalize_scan(results: list[dict], scan_id: str) -> dict:
         scan.status = ScanStatus.failed if any_failed else ScanStatus.done
         scan.finished_at = _now()
         session.commit()
+        final_status = scan.status.value
+        finished_at = scan.finished_at.isoformat() if scan.finished_at else None
 
-    return {"scan_id": scan_id, "status": scan.status.value}
+    publish_event(
+        scan_uuid,
+        "scan",
+        {"status": final_status, "finished_at": finished_at},
+    )
+    # Sentinel so the SSE endpoint knows it can close the stream.
+    publish_event(scan_uuid, "end", {})
+
+    return {"scan_id": scan_id, "status": final_status}
 
 
 def dispatch_scan(scan_id: uuid.UUID) -> None:

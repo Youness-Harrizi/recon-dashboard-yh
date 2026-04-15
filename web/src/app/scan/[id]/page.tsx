@@ -2,7 +2,14 @@
 
 import { use, useEffect, useState } from "react";
 
-import { getScan, type ScanDetail } from "@/lib/api";
+import {
+  getScan,
+  streamScanUrl,
+  type Finding,
+  type ModuleRun,
+  type ScanDetail,
+  type ScanStatus,
+} from "@/lib/api";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "#666",
@@ -12,6 +19,24 @@ const STATUS_COLORS: Record<string, string> = {
   skipped: "#888",
 };
 
+type ScanPatch = {
+  status?: ScanStatus;
+  finished_at?: string | null;
+};
+
+function mergeModuleRun(runs: ModuleRun[], incoming: ModuleRun): ModuleRun[] {
+  const idx = runs.findIndex((r) => r.id === incoming.id);
+  if (idx === -1) return [...runs, incoming];
+  const copy = runs.slice();
+  copy[idx] = { ...copy[idx], ...incoming };
+  return copy;
+}
+
+function mergeFinding(findings: Finding[], incoming: Finding): Finding[] {
+  if (findings.some((f) => f.id === incoming.id)) return findings;
+  return [...findings, incoming];
+}
+
 export default function ScanPage({
   params,
 }: {
@@ -20,26 +45,87 @@ export default function ScanPage({
   const { id } = use(params);
   const [scan, setScan] = useState<ScanDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    let es: EventSource | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    async function load() {
-      try {
-        const data = await getScan(id);
-        if (!cancelled) setScan(data);
-      } catch (err) {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : String(err));
+    async function fallbackPoll() {
+      // If SSE fails (network / proxy / old browser), fall back to polling.
+      async function tick() {
+        try {
+          const data = await getScan(id);
+          if (!cancelled) setScan(data);
+          if (!cancelled && (data.status === "done" || data.status === "failed")) {
+            if (pollTimer) clearInterval(pollTimer);
+          }
+        } catch (err) {
+          if (!cancelled)
+            setError(err instanceof Error ? err.message : String(err));
+        }
       }
+      await tick();
+      pollTimer = setInterval(tick, 2000);
     }
 
-    load();
-    // Polling — step 4 replaces this with SSE.
-    const t = setInterval(load, 1500);
+    es = new EventSource(streamScanUrl(id));
+
+    es.addEventListener("snapshot", (ev) => {
+      if (cancelled) return;
+      try {
+        const data = JSON.parse((ev as MessageEvent).data) as ScanDetail;
+        setScan(data);
+        setLive(true);
+      } catch {}
+    });
+
+    es.addEventListener("module_run", (ev) => {
+      if (cancelled) return;
+      try {
+        const run = JSON.parse((ev as MessageEvent).data) as ModuleRun;
+        setScan((prev) =>
+          prev ? { ...prev, module_runs: mergeModuleRun(prev.module_runs, run) } : prev,
+        );
+      } catch {}
+    });
+
+    es.addEventListener("finding", (ev) => {
+      if (cancelled) return;
+      try {
+        const finding = JSON.parse((ev as MessageEvent).data) as Finding;
+        setScan((prev) =>
+          prev ? { ...prev, findings: mergeFinding(prev.findings, finding) } : prev,
+        );
+      } catch {}
+    });
+
+    es.addEventListener("scan", (ev) => {
+      if (cancelled) return;
+      try {
+        const patch = JSON.parse((ev as MessageEvent).data) as ScanPatch;
+        setScan((prev) => (prev ? { ...prev, ...patch } : prev));
+      } catch {}
+    });
+
+    es.addEventListener("end", () => {
+      es?.close();
+    });
+
+    es.onerror = () => {
+      // Browser will auto-retry, but if it never opened we start polling as a
+      // fallback so the user still sees progress.
+      if (!cancelled && es && es.readyState === EventSource.CLOSED) {
+        setLive(false);
+        fallbackPoll();
+      }
+    };
+
     return () => {
       cancelled = true;
-      clearInterval(t);
+      es?.close();
+      if (pollTimer) clearInterval(pollTimer);
     };
   }, [id]);
 
@@ -61,6 +147,11 @@ export default function ScanPage({
               {scan.status}
             </strong>{" "}
             — started {new Date(scan.created_at).toLocaleString()}
+            {live && (
+              <span style={{ marginLeft: 10, fontSize: 12, color: "#6aa6ff" }}>
+                ● live
+              </span>
+            )}
           </div>
 
           <section style={{ marginTop: 32 }}>

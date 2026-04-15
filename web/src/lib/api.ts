@@ -54,3 +54,7 @@ export async function getScan(id: string): Promise<ScanDetail> {
   if (!res.ok) throw new Error(`request failed: ${res.status}`);
   return res.json();
 }
+
+export function streamScanUrl(id: string): string {
+  return `${API_URL}/api/v1/scans/${id}/stream`;
+}

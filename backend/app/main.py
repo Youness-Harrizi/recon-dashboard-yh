@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.routes_scans import router as scans_router
+from app.api.routes_stream import router as stream_router
 from app.config import settings
 from app.db import engine
 
@@ -29,6 +30,7 @@ app.add_middleware(
 )
 
 app.include_router(scans_router)
+app.include_router(stream_router)
 
 
 @app.get("/health")

@@ -2,7 +2,7 @@
 
 Self-hosted domain reconnaissance dashboard. Given a domain, runs passive recon modules (DNS, WHOIS, certificate transparency, tech fingerprinting, Wayback, etc.) and streams findings to a web UI.
 
-**Status:** step 3 — orchestrator + Celery worker. POST a scan and watch module runs + findings stream in (currently a single `dummy` module; real modules come in step 5).
+**Status:** step 4 — live UI via Server-Sent Events. POST a scan and watch module runs + findings stream in over a persistent connection (currently a single `dummy` module; real modules come in step 5).
 
 ## Stack
 
@@ -40,10 +40,11 @@ docker-compose.yml
 ## API
 
 ```
-POST /api/v1/scans           { "domain": "example.com" } → Scan
-GET  /api/v1/scans           → Scan[] (most recent first)
-GET  /api/v1/scans/{id}      → ScanDetail (includes findings + module_runs)
-GET  /health                 → dependency status
+POST /api/v1/scans              { "domain": "example.com" } → Scan
+GET  /api/v1/scans              → Scan[] (most recent first)
+GET  /api/v1/scans/{id}         → ScanDetail (includes findings + module_runs)
+GET  /api/v1/scans/{id}/stream  → SSE: snapshot, module_run, finding, scan, end
+GET  /health                    → dependency status
 ```
 
 Domain input is normalized (strips `https://`, paths, trailing dot, IDN→punycode) and rejected if it's an IP, `localhost`, or a reserved TLD like `.local`/`.internal`.
@@ -74,7 +75,11 @@ POST /api/v1/scans
 
 Modules implement a tiny Protocol (`app/recon/base.py`) and register themselves in `app/recon/registry.py`. The current registry has just `DummyModule`, which emits three findings spread over ~3s so you can watch the UI update.
 
+## Live updates
+
+Each worker publishes state changes (module status, new findings, scan done) on a Redis pub/sub channel (`scan:<id>`). The API exposes `GET /api/v1/scans/{id}/stream` as a Server-Sent Events endpoint that replays a snapshot then forwards every subsequent event to the browser — no polling, updates appear the instant they're persisted. The UI falls back to polling if the SSE connection fails.
+
 ## Next steps
 
-4. SSE streaming endpoint and live-updating UI (replace the current 1.5s poll).
 5. Real recon modules: dns → whois → crtsh → tls → http → wayback → github.
+6. Polish: severity scoring, caching (`domain_cache`), export, rate limiting.
