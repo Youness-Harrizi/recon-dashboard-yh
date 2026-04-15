@@ -58,3 +58,7 @@ export async function getScan(id: string): Promise<ScanDetail> {
 export function streamScanUrl(id: string): string {
   return `${API_URL}/api/v1/scans/${id}/stream`;
 }
+
+export function exportScanUrl(id: string): string {
+  return `${API_URL}/api/v1/scans/${id}/export.json`;
+}

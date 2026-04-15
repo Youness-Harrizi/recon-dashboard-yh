@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 
 import {
+  exportScanUrl,
   getScan,
   streamScanUrl,
   type Finding,
@@ -152,6 +153,20 @@ export default function ScanPage({
                 ● live
               </span>
             )}
+            <a
+              href={exportScanUrl(scan.id)}
+              style={{
+                marginLeft: 12,
+                fontSize: 12,
+                color: "#6aa6ff",
+                textDecoration: "none",
+                border: "1px solid #1f2933",
+                padding: "2px 8px",
+                borderRadius: 4,
+              }}
+            >
+              export JSON
+            </a>
           </div>
 
           <section style={{ marginTop: 32 }}>

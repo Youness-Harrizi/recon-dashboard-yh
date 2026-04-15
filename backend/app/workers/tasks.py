@@ -21,8 +21,10 @@ from app.db import SyncSessionLocal
 from app.models.finding import Finding
 from app.models.module_run import ModuleRun, ModuleStatus
 from app.models.scan import Scan, ScanStatus
+from app.models.finding import Severity
 from app.recon.base import Context, FindingDraft
 from app.recon.registry import MODULES, get_module
+from app.services import cache
 from app.services.events import publish_event
 from app.workers.celery_app import celery_app
 
@@ -109,8 +111,19 @@ def run_module(scan_id: str, module_name: str) -> dict:
             raise RuntimeError(f"scan {scan_id} disappeared")
         domain = scan.domain
 
+    # Collected raw drafts so we can populate the cache after a clean run.
+    emitted: list[dict] = []
+
     def emit(draft: FindingDraft) -> None:
         """Persist one finding immediately so the UI can see it right away."""
+        emitted.append(
+            {
+                "module": draft.module,
+                "title": draft.title,
+                "severity": draft.severity.value,
+                "data": draft.data,
+            }
+        )
         with SyncSessionLocal() as session:
             finding = Finding(
                 scan_id=scan_uuid,
@@ -126,14 +139,41 @@ def run_module(scan_id: str, module_name: str) -> dict:
 
     ctx = Context(domain=domain, scan_id=scan_uuid, emit=emit)
 
-    try:
-        module.run(ctx)
+    # Cache read-through: replay stored findings instead of re-running the module.
+    cached = cache.load(domain, module_name)
+    if cached is not None:
+        log.info("cache hit for %s/%s (%d findings)", domain, module_name, len(cached))
+        for item in cached:
+            try:
+                severity = Severity(item.get("severity", "info"))
+            except ValueError:
+                severity = Severity.info
+            emit(
+                FindingDraft(
+                    module=item.get("module", module_name),
+                    title=item.get("title", ""),
+                    severity=severity,
+                    data=item.get("data") or {},
+                )
+            )
         status = ModuleStatus.done
         error = None
-    except Exception as exc:  # noqa: BLE001 — we want to record any failure
-        log.exception("module %s failed for scan %s", module_name, scan_id)
-        status = ModuleStatus.failed
-        error = f"{type(exc).__name__}: {exc}"
+    else:
+        try:
+            module.run(ctx)
+            status = ModuleStatus.done
+            error = None
+            # Only cache successful runs. Don't cache the cached-replay path —
+            # that row is already fresh in the DB.
+            if emitted:
+                try:
+                    cache.store(domain, module_name, emitted)
+                except Exception:
+                    log.exception("cache store failed for %s/%s", domain, module_name)
+        except Exception as exc:  # noqa: BLE001 — we want to record any failure
+            log.exception("module %s failed for scan %s", module_name, scan_id)
+            status = ModuleStatus.failed
+            error = f"{type(exc).__name__}: {exc}"
 
     with SyncSessionLocal() as session:
         run = session.execute(
