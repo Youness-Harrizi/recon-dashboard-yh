@@ -2,15 +2,30 @@
 
 Adding a module = import it here and put it in MODULES. The orchestrator reads
 this list to fan out work; unit tests use it to assert coverage.
+
+Order in MODULES is cosmetic only — Celery dispatches them in parallel. It's
+kept roughly in order of cheapest → slowest so the UI fills in fast at the top.
 """
 
 from __future__ import annotations
 
 from app.recon.base import ReconModule
-from app.recon.dummy import DummyModule
+from app.recon.crtsh import CrtShModule
+from app.recon.dns_records import DnsModule
+from app.recon.github_dorks import GithubDorksModule
+from app.recon.http_fingerprint import HttpModule
+from app.recon.tls_cert import TlsModule
+from app.recon.wayback import WaybackModule
+from app.recon.whois_rdap import WhoisModule
 
 MODULES: list[ReconModule] = [
-    DummyModule(),
+    DnsModule(),
+    WhoisModule(),
+    CrtShModule(),
+    TlsModule(),
+    HttpModule(),
+    WaybackModule(),
+    GithubDorksModule(),
 ]
 
 MODULES_BY_NAME: dict[str, ReconModule] = {m.name: m for m in MODULES}

@@ -2,7 +2,7 @@
 
 Self-hosted domain reconnaissance dashboard. Given a domain, runs passive recon modules (DNS, WHOIS, certificate transparency, tech fingerprinting, Wayback, etc.) and streams findings to a web UI.
 
-**Status:** step 4 — live UI via Server-Sent Events. POST a scan and watch module runs + findings stream in over a persistent connection (currently a single `dummy` module; real modules come in step 5).
+**Status:** step 5 — seven real passive-ish recon modules wired up (`dns`, `whois`, `crtsh`, `tls`, `http`, `wayback`, `github`). Enter a domain and watch findings stream in live.
 
 ## Stack
 
@@ -73,7 +73,21 @@ POST /api/v1/scans
            finalize_scan → Scan.status = done|failed
 ```
 
-Modules implement a tiny Protocol (`app/recon/base.py`) and register themselves in `app/recon/registry.py`. The current registry has just `DummyModule`, which emits three findings spread over ~3s so you can watch the UI update.
+Modules implement a tiny Protocol (`app/recon/base.py`) and register themselves in `app/recon/registry.py`.
+
+## Modules
+
+| Module    | What it does                                                         | Source                                   |
+|-----------|----------------------------------------------------------------------|------------------------------------------|
+| `dns`     | Resolves A/AAAA/MX/NS/TXT/CNAME/SOA, flags missing SPF / DMARC       | Public resolvers via `dnspython`         |
+| `whois`   | RDAP: registrar, registration/expiration dates, nameservers, status  | `rdap.org` (follows to authoritative)    |
+| `crtsh`   | Subdomain enumeration from Certificate Transparency logs             | `crt.sh?output=json`                     |
+| `tls`     | Handshakes :443, parses cert (issuer, SAN, expiry + severity tiers)  | `ssl.create_default_context()`           |
+| `http`    | GETs `/`, inspects headers, missing security headers, tech markers   | Direct HTTPS                             |
+| `wayback` | Historical URLs for the domain                                       | `web.archive.org/cdx/search/cdx`         |
+| `github`  | Public code mentioning the domain (leaked configs, hardcoded URLs)   | GitHub code search API (needs token)     |
+
+Set `GITHUB_TOKEN` in `.env` to enable the `github` module — it skips gracefully otherwise.
 
 ## Live updates
 
@@ -81,5 +95,4 @@ Each worker publishes state changes (module status, new findings, scan done) on 
 
 ## Next steps
 
-5. Real recon modules: dns → whois → crtsh → tls → http → wayback → github.
-6. Polish: severity scoring, caching (`domain_cache`), export, rate limiting.
+6. Polish: caching via `domain_cache`, JSON/PDF export, slowapi rate limiting, tests.
