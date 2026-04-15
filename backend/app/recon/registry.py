@@ -14,6 +14,7 @@ from app.recon.crtsh import CrtShModule
 from app.recon.dns_records import DnsModule
 from app.recon.github_dorks import GithubDorksModule
 from app.recon.http_fingerprint import HttpModule
+from app.recon.shodan_dns import ShodanModule
 from app.recon.tls_cert import TlsModule
 from app.recon.wayback import WaybackModule
 from app.recon.whois_rdap import WhoisModule
@@ -25,6 +26,7 @@ MODULES: list[ReconModule] = [
     TlsModule(),
     HttpModule(),
     WaybackModule(),
+    ShodanModule(),
     GithubDorksModule(),
 ]
 

@@ -6,7 +6,7 @@ import pytest
 
 from app.recon.registry import MODULES, MODULES_BY_NAME, get_module
 
-EXPECTED_MODULES = {"dns", "whois", "crtsh", "tls", "http", "wayback", "github"}
+EXPECTED_MODULES = {"dns", "whois", "crtsh", "tls", "http", "wayback", "shodan", "github"}
 
 
 def test_all_expected_modules_registered() -> None:

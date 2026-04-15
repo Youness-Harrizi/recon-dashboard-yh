@@ -1,6 +1,6 @@
 # recon-dashboard-yh
 
-> Self-hosted OSINT & passive reconnaissance dashboard. Type a domain — watch seven independent modules stream findings into a live UI, then export as HTML / Excel / CSV / Markdown / JSON.
+> Self-hosted OSINT & passive reconnaissance dashboard. Type a domain — watch eight independent modules stream findings into a live UI, then export as HTML / Excel / CSV / Markdown / JSON.
 
 ![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
@@ -22,7 +22,7 @@ Every feature was chosen because it shows something concrete:
 
 | Feature | What it demonstrates |
 |---|---|
-| **7 parallel recon modules via Celery chord** | Non-trivial async/concurrency (async FastAPI + sync workers against the same DB, clean fan-out/fan-in) |
+| **8 parallel recon modules via Celery chord** | Non-trivial async/concurrency (async FastAPI + sync workers against the same DB, clean fan-out/fan-in) |
 | **Server-Sent Events over Redis pub/sub** | Real-time systems — no polling, no WebSocket ceremony, sub-second end-to-end latency |
 | **SSRF / abuse gate + rate limiting + passive-only modules** | Security-first design: think about misuse before shipping |
 | **Per-(domain, module) result cache with module-specific TTLs** | Operational thinking — respecting upstream services |
@@ -57,6 +57,7 @@ Submit `example.com` — you'll see seven module cards transition `pending → r
 | `tls`     | :443 handshake, cert parsing, expiry-based severity tiering          | stdlib `ssl`                                  |
 | `http`    | GETs `/`, inspects headers, flags missing security headers           | direct HTTPS                                  |
 | `wayback` | Historical URLs for the domain                                       | `web.archive.org` CDX API                     |
+| `shodan`  | Passive DNS (subdomains, records) + exposed services (optional)      | Shodan API — needs `SHODAN_API_KEY`           |
 | `github`  | Public code mentioning the domain (optional — needs `GITHUB_TOKEN`)  | GitHub code search API                        |
 
 Modules implement a tiny Protocol ([backend/app/recon/base.py](backend/app/recon/base.py)) and register themselves in [registry.py](backend/app/recon/registry.py). Adding a new module is ~30 lines.
@@ -86,7 +87,8 @@ flowchart LR
         M4["tls"]
         M5["http"]
         M6["wayback"]
-        M7["github"]
+        M7["shodan"]
+        M8["github"]
         FIN["finalize_scan"]
     end
 
@@ -94,10 +96,10 @@ flowchart LR
     POST -->|insert Scan + ModuleRuns| DB
     POST -->|enqueue chord| REDIS
     REDIS --> DISPATCH
-    DISPATCH --> M1 & M2 & M3 & M4 & M5 & M6 & M7
-    M1 & M2 & M3 & M4 & M5 & M6 & M7 -->|emit Finding| DB
-    M1 & M2 & M3 & M4 & M5 & M6 & M7 -->|publish event| REDIS
-    M1 & M2 & M3 & M4 & M5 & M6 & M7 --> FIN
+    DISPATCH --> M1 & M2 & M3 & M4 & M5 & M6 & M7 & M8
+    M1 & M2 & M3 & M4 & M5 & M6 & M7 & M8 -->|emit Finding| DB
+    M1 & M2 & M3 & M4 & M5 & M6 & M7 & M8 -->|publish event| REDIS
+    M1 & M2 & M3 & M4 & M5 & M6 & M7 & M8 --> FIN
     FIN -->|status=done| DB
     FIN -->|publish end| REDIS
     REDIS -->|subscribe| SSE

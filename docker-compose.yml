@@ -31,6 +31,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-recon}:${POSTGRES_PASSWORD:-recon}@postgres:5432/${POSTGRES_DB:-recon}
       REDIS_URL: redis://redis:6379/0
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
       CORS_ORIGINS: http://localhost:3000
     ports:
       - "8000:8000"
@@ -49,6 +50,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-recon}:${POSTGRES_PASSWORD:-recon}@postgres:5432/${POSTGRES_DB:-recon}
       REDIS_URL: redis://redis:6379/0
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -27,6 +27,7 @@ MODULE_TTL: dict[str, timedelta] = {
     "http": timedelta(hours=1),
     "wayback": timedelta(hours=12),
     "github": timedelta(hours=6),
+    "shodan": timedelta(hours=6),
 }
 
 DEFAULT_TTL = timedelta(hours=1)

@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     # Optional — enables the `github` module's code search. Unset = module skips.
     github_token: str = ""
+    # Optional — enables the `shodan` module. Unset = module skips.
+    shodan_api_key: str = ""
     user_agent: str = "recon-dashboard-yh/0.1 (+https://github.com/Youness-Harrizi/recon-dashboard-yh)"
 
     @property
