@@ -14,21 +14,7 @@
 <!-- Replace with docs/img/demo.gif once recorded -->
 <!-- ![demo](docs/img/demo.gif) -->
 
-## Why this exists
 
-This is a portfolio project that demonstrates how I approach **security-aware web application engineering**: a real-world fan-out pipeline, streamed over a persistent connection, hardened against abuse, and wrapped in a UI a non-engineer can actually use.
-
-Every feature was chosen because it shows something concrete:
-
-| Feature | What it demonstrates |
-|---|---|
-| **8 parallel recon modules via Celery chord** | Non-trivial async/concurrency (async FastAPI + sync workers against the same DB, clean fan-out/fan-in) |
-| **Server-Sent Events over Redis pub/sub** | Real-time systems — no polling, no WebSocket ceremony, sub-second end-to-end latency |
-| **SSRF / abuse gate + rate limiting + passive-only modules** | Security-first design: think about misuse before shipping |
-| **Per-(domain, module) result cache with module-specific TTLs** | Operational thinking — respecting upstream services |
-| **HTML/Excel/CSV/Markdown export + smart in-page tables** | Product empathy: JSON is for machines, users get the format they actually need |
-| **Hermetic test suite** | Testing discipline: no network, no DB, still meaningful |
-| **Docker Compose one-command self-host** | Ops awareness: anyone can run this in 60 seconds |
 
 ## Quick start
 
