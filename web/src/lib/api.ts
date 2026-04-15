@@ -59,6 +59,13 @@ export function streamScanUrl(id: string): string {
   return `${API_URL}/api/v1/scans/${id}/stream`;
 }
 
-export function exportScanUrl(id: string): string {
-  return `${API_URL}/api/v1/scans/${id}/export.json`;
+export type ExportFormat = "json" | "csv" | "xlsx" | "md" | "html";
+
+export function exportScanUrl(id: string, format: ExportFormat = "json"): string {
+  return `${API_URL}/api/v1/scans/${id}/export.${format}`;
+}
+
+export function viewReportUrl(id: string): string {
+  // HTML report opens inline (no download param) — nice for sharing / printing.
+  return `${API_URL}/api/v1/scans/${id}/export.html`;
 }

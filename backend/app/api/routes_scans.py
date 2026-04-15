@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -10,6 +10,7 @@ from app.db import get_session
 from app.models.scan import Scan
 from app.ratelimit import limiter
 from app.schemas.scan import ScanCreate, ScanDetail, ScanOut
+from app.services import exporters
 from app.services.domain_validator import InvalidDomainError, normalize_domain
 from app.services.orchestrator import start_scan
 
@@ -68,11 +69,7 @@ async def list_scans(
     return list(result.scalars().all())
 
 
-@router.get("/{scan_id}/export.json")
-async def export_scan(
-    scan_id: uuid.UUID, session: AsyncSession = Depends(get_session)
-) -> JSONResponse:
-    """Full scan + findings + module runs as a download."""
+async def _load_scan_dict(scan_id: uuid.UUID, session: AsyncSession) -> tuple[Scan, dict]:
     result = await session.execute(
         select(Scan)
         .where(Scan.id == scan_id)
@@ -84,10 +81,69 @@ async def export_scan(
     scan = result.scalar_one_or_none()
     if not scan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scan not found")
+    return scan, ScanDetail.model_validate(scan).model_dump(mode="json")
 
-    body = ScanDetail.model_validate(scan).model_dump(mode="json")
-    filename = f"recon-{scan.domain}-{scan.id}.json"
-    return JSONResponse(
-        content=body,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+
+def _attach(scan: Scan, ext: str) -> dict[str, str]:
+    filename = f"recon-{scan.domain}-{scan.id}.{ext}"
+    return {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+
+@router.get("/{scan_id}/export.json")
+async def export_scan_json(
+    scan_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+) -> JSONResponse:
+    scan, body = await _load_scan_dict(scan_id, session)
+    return JSONResponse(content=body, headers=_attach(scan, "json"))
+
+
+@router.get("/{scan_id}/export.csv")
+async def export_scan_csv(
+    scan_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+) -> Response:
+    scan, body = await _load_scan_dict(scan_id, session)
+    return Response(
+        content=exporters.to_csv(body),
+        media_type="text/csv; charset=utf-8",
+        headers=_attach(scan, "csv"),
+    )
+
+
+@router.get("/{scan_id}/export.xlsx")
+async def export_scan_xlsx(
+    scan_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+) -> Response:
+    scan, body = await _load_scan_dict(scan_id, session)
+    return Response(
+        content=exporters.to_xlsx(body),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=_attach(scan, "xlsx"),
+    )
+
+
+@router.get("/{scan_id}/export.md")
+async def export_scan_markdown(
+    scan_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+) -> Response:
+    scan, body = await _load_scan_dict(scan_id, session)
+    return Response(
+        content=exporters.to_markdown(body),
+        media_type="text/markdown; charset=utf-8",
+        headers=_attach(scan, "md"),
+    )
+
+
+@router.get("/{scan_id}/export.html", response_class=Response)
+async def export_scan_html(
+    scan_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    download: bool = False,
+) -> Response:
+    """HTML report. Opens inline by default; ?download=1 forces a save dialog."""
+    scan, body = await _load_scan_dict(scan_id, session)
+    headers = _attach(scan, "html") if download else {}
+    return Response(
+        content=exporters.to_html(body),
+        media_type="text/html; charset=utf-8",
+        headers=headers,
     )

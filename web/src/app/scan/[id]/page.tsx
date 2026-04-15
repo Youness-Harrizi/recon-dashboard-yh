@@ -6,11 +6,13 @@ import {
   exportScanUrl,
   getScan,
   streamScanUrl,
+  viewReportUrl,
   type Finding,
   type ModuleRun,
   type ScanDetail,
   type ScanStatus,
 } from "@/lib/api";
+import { FindingData } from "./FindingData";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "#666",
@@ -19,6 +21,26 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "#e0573b",
   skipped: "#888",
 };
+
+const SEVERITY_COLORS: Record<string, string> = {
+  info: "#5a8dee",
+  low: "#3bc275",
+  medium: "#e0a43b",
+  high: "#e0573b",
+  critical: "#b91c1c",
+};
+
+function exportBtn(primary = false): React.CSSProperties {
+  return {
+    fontSize: 12,
+    textDecoration: "none",
+    padding: "4px 10px",
+    borderRadius: 4,
+    border: "1px solid " + (primary ? "#2a5caa" : "#1f2933"),
+    background: primary ? "#132642" : "transparent",
+    color: primary ? "#9ac2ff" : "#cfd8e3",
+  };
+}
 
 type ScanPatch = {
   status?: ScanStatus;
@@ -153,19 +175,39 @@ export default function ScanPage({
                 ● live
               </span>
             )}
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <span style={{ fontSize: 12, opacity: 0.6, marginRight: 4 }}>
+              Export:
+            </span>
             <a
-              href={exportScanUrl(scan.id)}
-              style={{
-                marginLeft: 12,
-                fontSize: 12,
-                color: "#6aa6ff",
-                textDecoration: "none",
-                border: "1px solid #1f2933",
-                padding: "2px 8px",
-                borderRadius: 4,
-              }}
+              href={viewReportUrl(scan.id)}
+              target="_blank"
+              rel="noreferrer"
+              style={exportBtn(true)}
             >
-              export JSON
+              HTML report ↗
+            </a>
+            <a href={exportScanUrl(scan.id, "xlsx")} style={exportBtn()}>
+              Excel (.xlsx)
+            </a>
+            <a href={exportScanUrl(scan.id, "csv")} style={exportBtn()}>
+              CSV
+            </a>
+            <a href={exportScanUrl(scan.id, "md")} style={exportBtn()}>
+              Markdown
+            </a>
+            <a href={exportScanUrl(scan.id, "json")} style={exportBtn()}>
+              JSON
             </a>
           </div>
 
@@ -215,23 +257,34 @@ export default function ScanPage({
                       background: "#12151a",
                     }}
                   >
-                    <div style={{ fontSize: 12, opacity: 0.6 }}>
-                      {f.module} · {f.severity}
-                    </div>
-                    <div>{f.title}</div>
-                    {Object.keys(f.data).length > 0 && (
-                      <pre
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <span
                         style={{
-                          marginTop: 6,
-                          padding: 8,
-                          background: "#0b0d10",
-                          fontSize: 12,
-                          overflow: "auto",
+                          fontSize: 10,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.5,
+                          padding: "2px 6px",
+                          borderRadius: 3,
+                          background: SEVERITY_COLORS[f.severity] ?? "#555",
+                          color: "#fff",
+                          fontWeight: 600,
                         }}
                       >
-                        {JSON.stringify(f.data, null, 2)}
-                      </pre>
-                    )}
+                        {f.severity}
+                      </span>
+                      <span style={{ fontSize: 12, opacity: 0.6 }}>
+                        {f.module}
+                      </span>
+                    </div>
+                    <div style={{ fontWeight: 500 }}>{f.title}</div>
+                    <FindingData data={f.data} />
                   </li>
                 ))}
               </ul>

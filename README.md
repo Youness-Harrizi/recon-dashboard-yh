@@ -44,7 +44,11 @@ POST /api/v1/scans                    { "domain": "example.com" } → Scan   (10
 GET  /api/v1/scans                    → Scan[] (most recent first)
 GET  /api/v1/scans/{id}               → ScanDetail (findings + module_runs)
 GET  /api/v1/scans/{id}/stream        → SSE: snapshot, module_run, finding, scan, end
-GET  /api/v1/scans/{id}/export.json   → downloadable JSON report
+GET  /api/v1/scans/{id}/export.html   → self-contained HTML report (inline, printable to PDF)
+GET  /api/v1/scans/{id}/export.xlsx   → Excel workbook (Overview / Findings / Modules sheets)
+GET  /api/v1/scans/{id}/export.csv    → flat findings table (UTF-8 BOM, opens in Excel)
+GET  /api/v1/scans/{id}/export.md     → Markdown report
+GET  /api/v1/scans/{id}/export.json   → raw JSON
 GET  /health                          → dependency status
 ```
 
