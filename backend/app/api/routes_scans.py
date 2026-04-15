@@ -9,6 +9,7 @@ from app.db import get_session
 from app.models.scan import Scan
 from app.schemas.scan import ScanCreate, ScanDetail, ScanOut
 from app.services.domain_validator import InvalidDomainError, normalize_domain
+from app.services.orchestrator import start_scan
 
 router = APIRouter(prefix="/api/v1/scans", tags=["scans"])
 
@@ -28,7 +29,8 @@ async def create_scan(
     session.add(scan)
     await session.commit()
     await session.refresh(scan)
-    # NOTE: orchestrator wiring comes in step 3; for now scans stay 'pending'.
+
+    await start_scan(session, scan.id)
     return scan
 
 

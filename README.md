@@ -2,7 +2,7 @@
 
 Self-hosted domain reconnaissance dashboard. Given a domain, runs passive recon modules (DNS, WHOIS, certificate transparency, tech fingerprinting, Wayback, etc.) and streams findings to a web UI.
 
-**Status:** step 2 — data model + scan API. Scans persist to Postgres; orchestrator lands in step 3.
+**Status:** step 3 — orchestrator + Celery worker. POST a scan and watch module runs + findings stream in (currently a single `dummy` module; real modules come in step 5).
 
 ## Stack
 
@@ -57,8 +57,24 @@ docker compose exec backend alembic revision --autogenerate -m "describe change"
 docker compose exec backend alembic upgrade head
 ```
 
+## Architecture
+
+```
+POST /api/v1/scans
+   ↓ persists Scan(status=pending) + ModuleRun rows
+   ↓ dispatches Celery chord
+           ┌──────────────────────────┐
+           │ run_module(scan, name)   │  × N modules in parallel
+           │   → emit() → Finding rows│
+           │   → update ModuleRun     │
+           └─────────────┬────────────┘
+                         ↓ chord callback
+           finalize_scan → Scan.status = done|failed
+```
+
+Modules implement a tiny Protocol (`app/recon/base.py`) and register themselves in `app/recon/registry.py`. The current registry has just `DummyModule`, which emits three findings spread over ~3s so you can watch the UI update.
+
 ## Next steps
 
-3. Orchestrator + Celery + one dummy module that emits fake findings.
-4. SSE streaming endpoint and live-updating UI (replace the current 2s poll).
+4. SSE streaming endpoint and live-updating UI (replace the current 1.5s poll).
 5. Real recon modules: dns → whois → crtsh → tls → http → wayback → github.
